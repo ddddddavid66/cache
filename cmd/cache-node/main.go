@@ -30,13 +30,6 @@ func main() {
 		log.Fatalf("new server failed: %v", err)
 	}
 
-	group := cache.NewGroup(groupName, 2<<20, cache.GetterFunc( // 2 创建group
-		func(ctx context.Context, key string) ([]byte, error) {
-			log.Printf("[node %s] load from datasource, key=%s", *node, key)
-			return []byte(fmt.Sprintf("value-from-node-%s-for-%s", *node, key)), nil
-		},
-	))
-
 	ready := make(chan error, 1) //NOTE 阻塞队列 等待server启动
 	go func() {
 		if err := srv.StartWithReady(ready); err != nil { //3 启动server
@@ -46,6 +39,15 @@ func main() {
 	if err := <-ready; err != nil {
 		log.Fatalf("server register  failed: %v", err) //4 server 注册etcd
 	}
+	workID := srv.WorkID()
+	log.Printf("workerID=%d", workID)
+
+	group := cache.NewGroup(groupName, 2<<20, cache.GetterFunc( // 2 创建group
+		func(ctx context.Context, key string) ([]byte, error) {
+			log.Printf("[node %s] load from datasource, key=%s", *node, key)
+			return []byte(fmt.Sprintf("value-from-node-%s-for-%s", *node, key)), nil
+		},
+	), workID)
 
 	picker, err := client.NewPicker(etcdEndpoints, serviceName, addr) //
 	if err != nil {

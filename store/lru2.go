@@ -6,12 +6,18 @@ import (
 	"hash/fnv"
 	"log"
 	"math/rand"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
 var ErrSetErr = fmt.Errorf("could not set key")
+
+type entry struct {
+	key   string
+	value Value
+}
 
 // 有L1 L2  分别是独立的LRU
 
@@ -20,6 +26,7 @@ type LRU2Store struct {
 	caches [][2]*cache
 	mask   uint32        //通过这个计算key存储到哪个桶
 	done   chan struct{} // 后台主动过期策略淘汰 中止
+	closed atomic.Bool   // 关闭字段 防止重复关闭
 }
 
 func NewLRU2Store(count int, maxBytes1, maxBytes2 int64) *LRU2Store {
@@ -30,6 +37,7 @@ func NewLRU2Store(count int, maxBytes1, maxBytes2 int64) *LRU2Store {
 		locks:  make([]sync.Mutex, count),
 		caches: make([][2]*cache, count),
 		mask:   uint32(count - 1),
+		done:   make(chan struct{}),
 	}
 	for i := 0; i < count; i++ {
 		s.caches[i][0] = NewCache(l1Store)
@@ -41,23 +49,21 @@ func NewLRU2Store(count int, maxBytes1, maxBytes2 int64) *LRU2Store {
 
 func (s *LRU2Store) SetWithExpiration(key string, value Value, ttl time.Duration) error {
 	if ttl == 0 {
-		s.Set(key, value)
+		return s.Set(key, value)
 	}
 	index := s.getIndex(key)
 	l1 := s.caches[index][0]
 	l2 := s.caches[index][1]
 	s.locks[index].Lock() //加锁
 	defer s.locks[index].Unlock()
-	if value, ok := l1.Get(key); ok {
-		l1.SetWithExpiration(key, value, ttl)
-		return nil
+	if _, ok := l1.Get(key); ok {
+		return l1.SetWithExpiration(key, value, ttl)
 	}
-	if value, ok := l2.Get(key); ok {
-		l2.SetWithExpiration(key, value, ttl)
-		return nil
+	if _, ok := l2.Get(key); ok {
+		return l2.SetWithExpiration(key, value, ttl)
 	}
 
-	return l1.Set(key, value)
+	return l1.SetWithExpiration(key, value, ttl)
 
 }
 
@@ -67,15 +73,13 @@ func (s *LRU2Store) Set(key string, value Value) error {
 	l2 := s.caches[index][1]
 	s.locks[index].Lock() //加锁
 	defer s.locks[index].Unlock()
-	if value, ok := l1.Get(key); ok {
-		l1.Set(key, value)
-		return nil
+	if _, ok := l1.Get(key); ok {
+		return l1.Set(key, value)
 	}
-	if value, ok := l2.Get(key); ok {
-		l2.Set(key, value)
-		return nil
+	if _, ok := l2.Get(key); ok {
+		return l2.Set(key, value)
 	}
-	return ErrSetErr
+	return l1.Set(key, value) //  都没有插入 L1
 }
 
 func (s *LRU2Store) Get(key string) (Value, bool) {
@@ -84,30 +88,33 @@ func (s *LRU2Store) Get(key string) (Value, bool) {
 	l2 := s.caches[index][1]
 	s.locks[index].Lock() //加锁
 	defer s.locks[index].Unlock()
+
 	value, ok := l1.Get(key)
 	if !ok {
 		value, ok = l2.Get(key)
 		if !ok {
 			return nil, false
 		}
+		return value, true
 	}
 	//  升级为L2
 	// 判断是否有 TTL
 	if ttl := l1.remainTTL(key); ttl > 0 {
 		l2.SetWithExpiration(key, value, ttl)
-	} else if ttl == 0 {
+	} else {
 		l2.Set(key, value)
-		l1.Delete(key)
-		return l2.Get(key)
 	}
-	// ttl < 0
-	return nil, false
+	l1.Delete(key)
+	// L1 -> L2
+	return value, true
 }
 
 func (s *LRU2Store) Delete(key string) bool {
 	index := s.getIndex(key)
 	l1 := s.caches[index][0]
 	l2 := s.caches[index][1]
+	s.locks[index].Lock() //加锁
+	defer s.locks[index].Unlock()
 	if _, ok := l1.Get(key); ok {
 		l1.Delete(key)
 		return true
@@ -132,6 +139,9 @@ func (s *LRU2Store) Len() int {
 }
 
 func (s *LRU2Store) Close() error {
+	if s.closed.Swap(true) {
+		return nil //防止重复删除
+	}
 	close(s.done) // 清除 主动删除
 	for i := range s.caches {
 		s.locks[i].Lock()
@@ -146,6 +156,61 @@ func (s *LRU2Store) getIndex(key string) int {
 	h := fnv.New32()
 	h.Write([]byte(key))
 	return int(h.Sum32() & s.mask)
+}
+
+// 实现Scanner接口
+func (s *LRU2Store) Scan(startKey string, count int64) []EntryStore {
+	if count <= 0 {
+		count = int64(^uint(0) >> 1) // 全量扫描
+	}
+	now := time.Now()
+	records := make([]EntryStore, 0)
+	seen := make(map[string]struct{}) //用来去重的
+	for i := range s.caches {
+		s.locks[i].Lock()
+		// 扫描单个LRU
+		scanSingleLRU(s.caches[i][0], now, seen, &records)
+		scanSingleLRU(s.caches[i][1], now, seen, &records)
+		s.locks[i].Unlock()
+	}
+	//根据key排序
+	sort.Slice(records, func(i int, j int) bool {
+		return records[i].Key < records[j].Key
+	})
+	//获取扫描到的元素 startKey是"" 的时候 会报错
+	if startKey != "" {
+		pos := sort.Search(len(records), func(i int) bool {
+			return records[i].Key > startKey
+		})
+		records = records[pos:]
+	}
+	if int64(len(records)) > count { //再截取指定数量
+		records = records[:count]
+	}
+	return records
+}
+
+func scanSingleLRU(c *cache, now time.Time, seen map[string]struct{}, records *[]EntryStore) { //自己已经带锁了
+	for ele := c.ll.Front(); ele != nil; ele = ele.Next() {
+		entry := ele.Value.(*entry)
+		if _, ok := seen[entry.key]; ok {
+			continue
+		}
+		ttl := time.Duration(0) //默认是0
+		if exp, ok := c.expires[entry.key]; ok {
+			if !now.Before(exp) {
+				continue //过期
+			}
+			ttl = exp.Sub(now) //NOTE Sub 减少重新计算now
+		}
+		seen[entry.key] = struct{}{} //存储去重
+		e := EntryStore{
+			Key:   entry.key,
+			Value: entry.value,
+			TTL:   ttl,
+		}
+		*records = append(*records, e) //添加元素
+	}
 }
 
 // 本质就是一个 LRU 但是不能有锁
@@ -166,6 +231,7 @@ func NewCache(maxBytes int64) *cache {
 		usedBytes: 0,
 		ll:        list.New(),
 		caches:    make(map[string]*list.Element, 0),
+		expires:   make(map[string]time.Time),
 		onEvicted: func(key string, value Value) { log.Printf("delete key: %s", key) },
 	}
 }

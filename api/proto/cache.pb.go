@@ -76,6 +76,8 @@ func (x *GetRequest) GetKey() string {
 type GetResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Value         []byte                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
+	Ok            bool                   `protobuf:"varint,2,opt,name=ok,proto3" json:"ok,omitempty"`
+	Version       int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -117,12 +119,28 @@ func (x *GetResponse) GetValue() []byte {
 	return nil
 }
 
+func (x *GetResponse) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
+func (x *GetResponse) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
 type SetRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Group         string                 `protobuf:"bytes,1,opt,name=group,proto3" json:"group,omitempty"`
 	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
 	Value         []byte                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
 	FromPeer      bool                   `protobuf:"varint,4,opt,name=from_peer,json=fromPeer,proto3" json:"from_peer,omitempty"`
+	TtlMs         int64                  `protobuf:"varint,5,opt,name=ttl_ms,json=ttlMs,proto3" json:"ttl_ms,omitempty"`
+	Version       int64                  `protobuf:"varint,6,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -185,6 +203,20 @@ func (x *SetRequest) GetFromPeer() bool {
 	return false
 }
 
+func (x *SetRequest) GetTtlMs() int64 {
+	if x != nil {
+		return x.TtlMs
+	}
+	return 0
+}
+
+func (x *SetRequest) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
 type SetResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ok            bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
@@ -229,6 +261,394 @@ func (x *SetResponse) GetOk() bool {
 	return false
 }
 
+type DeleteRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Group         string                 `protobuf:"bytes,1,opt,name=group,proto3" json:"group,omitempty"`
+	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	FromPeer      bool                   `protobuf:"varint,3,opt,name=from_peer,json=fromPeer,proto3" json:"from_peer,omitempty"`
+	Verison       int64                  `protobuf:"varint,4,opt,name=verison,proto3" json:"verison,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteRequest) Reset() {
+	*x = DeleteRequest{}
+	mi := &file_api_proto_cache_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteRequest) ProtoMessage() {}
+
+func (x *DeleteRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_cache_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteRequest.ProtoReflect.Descriptor instead.
+func (*DeleteRequest) Descriptor() ([]byte, []int) {
+	return file_api_proto_cache_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *DeleteRequest) GetGroup() string {
+	if x != nil {
+		return x.Group
+	}
+	return ""
+}
+
+func (x *DeleteRequest) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *DeleteRequest) GetFromPeer() bool {
+	if x != nil {
+		return x.FromPeer
+	}
+	return false
+}
+
+func (x *DeleteRequest) GetVerison() int64 {
+	if x != nil {
+		return x.Verison
+	}
+	return 0
+}
+
+type DeleteResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ok            bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteResponse) Reset() {
+	*x = DeleteResponse{}
+	mi := &file_api_proto_cache_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteResponse) ProtoMessage() {}
+
+func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_cache_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteResponse.ProtoReflect.Descriptor instead.
+func (*DeleteResponse) Descriptor() ([]byte, []int) {
+	return file_api_proto_cache_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *DeleteResponse) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
+type CacheEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Group         string                 `protobuf:"bytes,1,opt,name=group,proto3" json:"group,omitempty"`
+	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Value         []byte                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	TtlMs         int64                  `protobuf:"varint,4,opt,name=ttl_ms,json=ttlMs,proto3" json:"ttl_ms,omitempty"`
+	Version       int64                  `protobuf:"varint,5,opt,name=version,proto3" json:"version,omitempty"`
+	Tombstone     bool                   `protobuf:"varint,6,opt,name=tombstone,proto3" json:"tombstone,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CacheEntry) Reset() {
+	*x = CacheEntry{}
+	mi := &file_api_proto_cache_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CacheEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CacheEntry) ProtoMessage() {}
+
+func (x *CacheEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_cache_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CacheEntry.ProtoReflect.Descriptor instead.
+func (*CacheEntry) Descriptor() ([]byte, []int) {
+	return file_api_proto_cache_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *CacheEntry) GetGroup() string {
+	if x != nil {
+		return x.Group
+	}
+	return ""
+}
+
+func (x *CacheEntry) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *CacheEntry) GetValue() []byte {
+	if x != nil {
+		return x.Value
+	}
+	return nil
+}
+
+func (x *CacheEntry) GetTtlMs() int64 {
+	if x != nil {
+		return x.TtlMs
+	}
+	return 0
+}
+
+func (x *CacheEntry) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *CacheEntry) GetTombstone() bool {
+	if x != nil {
+		return x.Tombstone
+	}
+	return false
+}
+
+type ScanRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Group         string                 `protobuf:"bytes,1,opt,name=group,proto3" json:"group,omitempty"`
+	StartKey      string                 `protobuf:"bytes,2,opt,name=start_key,json=startKey,proto3" json:"start_key,omitempty"`
+	Count         int64                  `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ScanRequest) Reset() {
+	*x = ScanRequest{}
+	mi := &file_api_proto_cache_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScanRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScanRequest) ProtoMessage() {}
+
+func (x *ScanRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_cache_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScanRequest.ProtoReflect.Descriptor instead.
+func (*ScanRequest) Descriptor() ([]byte, []int) {
+	return file_api_proto_cache_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ScanRequest) GetGroup() string {
+	if x != nil {
+		return x.Group
+	}
+	return ""
+}
+
+func (x *ScanRequest) GetStartKey() string {
+	if x != nil {
+		return x.StartKey
+	}
+	return ""
+}
+
+func (x *ScanRequest) GetCount() int64 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
+type ScanResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Entries       []*CacheEntry          `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ScanResponse) Reset() {
+	*x = ScanResponse{}
+	mi := &file_api_proto_cache_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScanResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScanResponse) ProtoMessage() {}
+
+func (x *ScanResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_cache_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScanResponse.ProtoReflect.Descriptor instead.
+func (*ScanResponse) Descriptor() ([]byte, []int) {
+	return file_api_proto_cache_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ScanResponse) GetEntries() []*CacheEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+type BatchRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Entries       []*CacheEntry          `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BatchRequest) Reset() {
+	*x = BatchRequest{}
+	mi := &file_api_proto_cache_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BatchRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BatchRequest) ProtoMessage() {}
+
+func (x *BatchRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_cache_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BatchRequest.ProtoReflect.Descriptor instead.
+func (*BatchRequest) Descriptor() ([]byte, []int) {
+	return file_api_proto_cache_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *BatchRequest) GetEntries() []*CacheEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+type BatchResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ok            bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BatchResponse) Reset() {
+	*x = BatchResponse{}
+	mi := &file_api_proto_cache_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BatchResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BatchResponse) ProtoMessage() {}
+
+func (x *BatchResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_cache_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BatchResponse.ProtoReflect.Descriptor instead.
+func (*BatchResponse) Descriptor() ([]byte, []int) {
+	return file_api_proto_cache_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *BatchResponse) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
 var File_api_proto_cache_proto protoreflect.FileDescriptor
 
 const file_api_proto_cache_proto_rawDesc = "" +
@@ -237,20 +657,52 @@ const file_api_proto_cache_proto_rawDesc = "" +
 	"\n" +
 	"GetRequest\x12\x14\n" +
 	"\x05group\x18\x01 \x01(\tR\x05group\x12\x10\n" +
-	"\x03key\x18\x02 \x01(\tR\x03key\"#\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\"M\n" +
 	"\vGetResponse\x12\x14\n" +
-	"\x05value\x18\x01 \x01(\fR\x05value\"g\n" +
+	"\x05value\x18\x01 \x01(\fR\x05value\x12\x0e\n" +
+	"\x02ok\x18\x02 \x01(\bR\x02ok\x12\x18\n" +
+	"\aversion\x18\x03 \x01(\x03R\aversion\"\x98\x01\n" +
 	"\n" +
 	"SetRequest\x12\x14\n" +
 	"\x05group\x18\x01 \x01(\tR\x05group\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x03 \x01(\fR\x05value\x12\x1b\n" +
-	"\tfrom_peer\x18\x04 \x01(\bR\bfromPeer\"\x1d\n" +
+	"\tfrom_peer\x18\x04 \x01(\bR\bfromPeer\x12\x15\n" +
+	"\x06ttl_ms\x18\x05 \x01(\x03R\x05ttlMs\x12\x18\n" +
+	"\aversion\x18\x06 \x01(\x03R\aversion\"\x1d\n" +
 	"\vSetResponse\x12\x0e\n" +
-	"\x02ok\x18\x01 \x01(\bR\x02ok2r\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok\"n\n" +
+	"\rDeleteRequest\x12\x14\n" +
+	"\x05group\x18\x01 \x01(\tR\x05group\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\x12\x1b\n" +
+	"\tfrom_peer\x18\x03 \x01(\bR\bfromPeer\x12\x18\n" +
+	"\averison\x18\x04 \x01(\x03R\averison\" \n" +
+	"\x0eDeleteResponse\x12\x0e\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok\"\x99\x01\n" +
+	"\n" +
+	"CacheEntry\x12\x14\n" +
+	"\x05group\x18\x01 \x01(\tR\x05group\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x03 \x01(\fR\x05value\x12\x15\n" +
+	"\x06ttl_ms\x18\x04 \x01(\x03R\x05ttlMs\x12\x18\n" +
+	"\aversion\x18\x05 \x01(\x03R\aversion\x12\x1c\n" +
+	"\ttombstone\x18\x06 \x01(\bR\ttombstone\"V\n" +
+	"\vScanRequest\x12\x14\n" +
+	"\x05group\x18\x01 \x01(\tR\x05group\x12\x1b\n" +
+	"\tstart_key\x18\x02 \x01(\tR\bstartKey\x12\x14\n" +
+	"\x05count\x18\x03 \x01(\x03R\x05count\"=\n" +
+	"\fScanResponse\x12-\n" +
+	"\aentries\x18\x01 \x03(\v2\x13.cachepb.CacheEntryR\aentries\"=\n" +
+	"\fBatchRequest\x12-\n" +
+	"\aentries\x18\x01 \x03(\v2\x13.cachepb.CacheEntryR\aentries\"\x1f\n" +
+	"\rBatchResponse\x12\x0e\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok2\x9d\x02\n" +
 	"\fCacheService\x120\n" +
 	"\x03Get\x12\x13.cachepb.GetRequest\x1a\x14.cachepb.GetResponse\x120\n" +
-	"\x03Set\x12\x13.cachepb.SetRequest\x1a\x14.cachepb.SetResponseB\x1cZ\x1anewCache/api/proto;cachepbb\x06proto3"
+	"\x03Set\x12\x13.cachepb.SetRequest\x1a\x14.cachepb.SetResponse\x129\n" +
+	"\x06Delete\x12\x16.cachepb.DeleteRequest\x1a\x17.cachepb.DeleteResponse\x123\n" +
+	"\x04Scan\x12\x14.cachepb.ScanRequest\x1a\x15.cachepb.ScanResponse\x129\n" +
+	"\bBatchSet\x12\x15.cachepb.BatchRequest\x1a\x16.cachepb.BatchResponseB\x1cZ\x1anewCache/api/proto;cachepbb\x06proto3"
 
 var (
 	file_api_proto_cache_proto_rawDescOnce sync.Once
@@ -264,23 +716,38 @@ func file_api_proto_cache_proto_rawDescGZIP() []byte {
 	return file_api_proto_cache_proto_rawDescData
 }
 
-var file_api_proto_cache_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_api_proto_cache_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_api_proto_cache_proto_goTypes = []any{
-	(*GetRequest)(nil),  // 0: cachepb.GetRequest
-	(*GetResponse)(nil), // 1: cachepb.GetResponse
-	(*SetRequest)(nil),  // 2: cachepb.SetRequest
-	(*SetResponse)(nil), // 3: cachepb.SetResponse
+	(*GetRequest)(nil),     // 0: cachepb.GetRequest
+	(*GetResponse)(nil),    // 1: cachepb.GetResponse
+	(*SetRequest)(nil),     // 2: cachepb.SetRequest
+	(*SetResponse)(nil),    // 3: cachepb.SetResponse
+	(*DeleteRequest)(nil),  // 4: cachepb.DeleteRequest
+	(*DeleteResponse)(nil), // 5: cachepb.DeleteResponse
+	(*CacheEntry)(nil),     // 6: cachepb.CacheEntry
+	(*ScanRequest)(nil),    // 7: cachepb.ScanRequest
+	(*ScanResponse)(nil),   // 8: cachepb.ScanResponse
+	(*BatchRequest)(nil),   // 9: cachepb.BatchRequest
+	(*BatchResponse)(nil),  // 10: cachepb.BatchResponse
 }
 var file_api_proto_cache_proto_depIdxs = []int32{
-	0, // 0: cachepb.CacheService.Get:input_type -> cachepb.GetRequest
-	2, // 1: cachepb.CacheService.Set:input_type -> cachepb.SetRequest
-	1, // 2: cachepb.CacheService.Get:output_type -> cachepb.GetResponse
-	3, // 3: cachepb.CacheService.Set:output_type -> cachepb.SetResponse
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	6,  // 0: cachepb.ScanResponse.entries:type_name -> cachepb.CacheEntry
+	6,  // 1: cachepb.BatchRequest.entries:type_name -> cachepb.CacheEntry
+	0,  // 2: cachepb.CacheService.Get:input_type -> cachepb.GetRequest
+	2,  // 3: cachepb.CacheService.Set:input_type -> cachepb.SetRequest
+	4,  // 4: cachepb.CacheService.Delete:input_type -> cachepb.DeleteRequest
+	7,  // 5: cachepb.CacheService.Scan:input_type -> cachepb.ScanRequest
+	9,  // 6: cachepb.CacheService.BatchSet:input_type -> cachepb.BatchRequest
+	1,  // 7: cachepb.CacheService.Get:output_type -> cachepb.GetResponse
+	3,  // 8: cachepb.CacheService.Set:output_type -> cachepb.SetResponse
+	5,  // 9: cachepb.CacheService.Delete:output_type -> cachepb.DeleteResponse
+	8,  // 10: cachepb.CacheService.Scan:output_type -> cachepb.ScanResponse
+	10, // 11: cachepb.CacheService.BatchSet:output_type -> cachepb.BatchResponse
+	7,  // [7:12] is the sub-list for method output_type
+	2,  // [2:7] is the sub-list for method input_type
+	2,  // [2:2] is the sub-list for extension type_name
+	2,  // [2:2] is the sub-list for extension extendee
+	0,  // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_api_proto_cache_proto_init() }
@@ -294,7 +761,7 @@ func file_api_proto_cache_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_cache_proto_rawDesc), len(file_api_proto_cache_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

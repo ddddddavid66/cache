@@ -7,6 +7,9 @@ option go_package = "newCache/api/proto;cachepb";
 service CacheService {
   rpc Get(GetRequest) returns (GetResponse);
   rpc Set(SetRequest) returns (SetResponse);
+  rpc Delete(DeleteRequest) returns (DeleteResponse);
+  rpc Scan(ScanRequest) returns (ScanResponse);
+  rpc BatchSet(BatchRequest) returns (BatchResponse);
 }
 
 message GetRequest {
@@ -15,7 +18,9 @@ message GetRequest {
 }
 
 message GetResponse {
-  bytes value = 1;
+  bytes value   = 1;
+  bool  ok      = 2;
+  int64 version = 3;
 }
 
 message SetRequest {
@@ -23,8 +28,48 @@ message SetRequest {
   string key       = 2;
   bytes  value     = 3;
   bool   from_peer = 4;
+  int64  ttl_ms    = 5;
+  int64  version   = 6;
 }
 
 message SetResponse {
+  bool ok = 1;
+}
+
+message DeleteRequest {
+  string group     = 1;
+  string key       = 2;
+  bool   from_peer = 3;
+  int64  verison   = 4;
+}
+
+message DeleteResponse {
+  bool ok = 1;
+}
+
+message CacheEntry {
+  string group     = 1;
+  string key       = 2;
+  bytes  value     = 3;
+  int64  ttl_ms    = 4;
+  int64  version   = 5;
+  bool   tombstone = 6;
+}
+
+message ScanRequest {
+  string group     = 1;
+  string start_key = 2;
+  int64  count     = 3;
+}
+
+message ScanResponse {
+  repeated CacheEntry entries = 1;
+}
+
+message BatchRequest {
+  repeated CacheEntry entries = 1;
+}
+
+message BatchResponse {
   bool ok = 1;
 }

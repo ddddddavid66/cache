@@ -6,6 +6,7 @@ import (
 	cachepb "newCache/api/proto"
 	"newCache/cache"
 	"newCache/internal/registry"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -92,7 +93,11 @@ func (s *Server) Set(ctx context.Context, req *cachepb.SetRequest) (*cachepb.Set
 	if req.FromPeer {
 		ctx = cache.WithPeer(ctx)
 	}
-	if err := g.Set(ctx, req.Key, req.Value); err != nil {
+	ttl := time.Duration(req.TtlMs) * time.Millisecond
+	if ttl <= 0 {
+		ttl = 5 * time.Second
+	}
+	if err := g.Set(ctx, req.Key, req.Value, req.Version, ttl); err != nil {
 		return nil, err
 	}
 	return &cachepb.SetResponse{Ok: true}, nil
@@ -101,4 +106,72 @@ func (s *Server) Set(ctx context.Context, req *cachepb.SetRequest) (*cachepb.Set
 func (s *Server) Stop(ctx context.Context) error {
 	s.grpcSrv.GracefulStop()
 	return s.registry.Close(ctx)
+}
+
+func (s *Server) WorkID() int64 {
+	if s.registry == nil {
+		return -1
+	}
+	return s.registry.WorkID()
+}
+
+func (s *Server) Delete(ctx context.Context, req *cachepb.DeleteRequest) (*cachepb.DeleteResponse, error) {
+	g := cache.GetGroup(req.Group)
+	if g == nil {
+		return nil, status.Errorf(codes.NotFound, "group %s not found", req.Group)
+	}
+	if req.FromPeer {
+		ctx = cache.WithPeer(ctx)
+	}
+	ok := g.DeleteWithVersion(ctx, req.Key, req.Verison)
+	return &cachepb.DeleteResponse{Ok: ok}, nil
+}
+
+func (s *Server) Scan(ctx context.Context, req *cachepb.ScanRequest) (*cachepb.ScanResponse, error) {
+	g := cache.GetGroup(req.Group)
+	if g == nil {
+		return &cachepb.ScanResponse{}, status.Errorf(codes.NotFound, "group %s not found", req.Group)
+	}
+
+	entries, err := g.Scan(req.StartKey, req.Count)
+	resp := &cachepb.ScanResponse{Entries: make([]*cachepb.CacheEntry, 0, len(entries))}
+	for _, entry := range entries {
+		resp.Entries = append(resp.Entries, &cachepb.CacheEntry{
+			Group:     entry.Group,
+			Key:       entry.Key,
+			Value:     entry.Value,
+			TtlMs:     entry.TtlMs,
+			Version:   entry.Version,
+			Tombstone: entry.Tombstone,
+		})
+	}
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (s *Server) BatchSet(ctx context.Context, req *cachepb.BatchRequest) (*cachepb.BatchResponse, error) {
+	if len(req.Entries) == 0 { // 成功完成
+		return &cachepb.BatchResponse{Ok: true}, nil
+	}
+	g := cache.GetGroup(req.Entries[0].Group)
+	if g == nil {
+		return nil, status.Errorf(codes.NotFound, "group %s not found", req.Entries[0].Group)
+	}
+	entries := make([]cache.TransportEntry, 0, len(req.Entries))
+	for _, entry := range req.Entries {
+		entries = append(entries, cache.TransportEntry{
+			Group:     entry.Group,
+			Key:       entry.Key,
+			Value:     entry.Value,
+			TtlMs:     entry.TtlMs,
+			Version:   entry.Version,
+			Tombstone: entry.Tombstone,
+		})
+	}
+	if err := g.BatchSet(ctx, entries); err != nil {
+		return nil, err
+	}
+	return &cachepb.BatchResponse{Ok: true}, nil
 }

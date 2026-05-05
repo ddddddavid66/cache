@@ -1,10 +1,11 @@
 package cache
 
 import (
-	"errors"
+	"fmt"
 	"newCache/store"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 //`Cache` 是 `Group` 和 `Store` 之间的一层包，
@@ -48,36 +49,30 @@ func newStore(maxBytes int64, cfg cacheConfig) store.Store {
 }
 
 // 操作不需要加锁 因为store 已经 加上锁了
-
 func (c *Cache) Get(key string) (ByteView, bool) {
-	if c.closed.Load() {
+	entry, ok := c.GetEntry(key)
+	if !ok || entry.Tombstone {
 		return ByteView{}, false
 	}
-
-	v, ok := c.store.Get(key)
-	if !ok {
-		atomic.AddInt64(&c.misses, 1)
-		return ByteView{}, false
-	}
-
-	bv, ok := v.(ByteView)
-	if !ok {
-		atomic.AddInt64(&c.misses, 1)
-		return ByteView{}, false
-	}
-
-	atomic.AddInt64(&c.hits, 1)
-	return bv, true
+	return entry.Value, true
 }
 
-func (c *Cache) Set(key string, value ByteView) error {
+// 不需要判断墓碑 因为get已经判断了
+func (c *Cache) Set(key string, entry CacheEntry) error {
 	if c.closed.Load() {
-		return errors.New("cache is closed")
+		return fmt.Errorf("cache has closed")
 	}
-
-	return c.store.Set(key, value)
+	if entry.ExpiredAt.IsZero() { // 判断 有没有ttl
+		return c.store.Set(key, entry)
+	}
+	ttl := time.Until(entry.ExpiredAt)
+	if ttl <= 0 { // 过期了
+		return nil
+	}
+	return c.store.SetWithExpiration(key, entry, ttl)
 }
 
+// 物理删除 s
 func (c *Cache) Delete(key string) bool {
 	if c.closed.Load() {
 		return false
@@ -87,7 +82,6 @@ func (c *Cache) Delete(key string) bool {
 }
 
 func (c *Cache) Len() int {
-
 	return c.store.Len()
 }
 
@@ -97,4 +91,26 @@ func (c *Cache) Close() error {
 	}
 
 	return c.store.Close()
+}
+
+func (c *Cache) GetEntry(key string) (CacheEntry, bool) {
+	if c.closed.Load() { // 判断是否关闭
+		return CacheEntry{}, false
+	}
+	value, ok := c.store.Get(key)
+	if !ok {
+		atomic.AddInt64(&c.misses, 1)
+		return CacheEntry{}, false
+	}
+	switch entry := value.(type) {
+	case CacheEntry:
+		atomic.AddInt64(&c.hits, 1)
+		return entry, true
+	case ByteView:
+		atomic.AddInt64(&c.hits, 1)
+		return CacheEntry{Value: entry}, true
+	default:
+		atomic.AddInt64(&c.misses, 1)
+		return CacheEntry{}, false
+	}
 }

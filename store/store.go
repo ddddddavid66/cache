@@ -16,3 +16,14 @@ type Store interface {
 	Len() int
 	Close() error
 }
+
+// 可选实现接口
+type Scanner interface {
+	Scan(startKey string, count int64) []EntryStore
+}
+
+type EntryStore struct {
+	Key   string
+	Value Value
+	TTL   time.Duration
+}

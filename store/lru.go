@@ -12,11 +12,6 @@ import (
 
 var ttl = 5 * time.Minute
 
-type entry struct {
-	key   string
-	value Value
-}
-
 type LRUStore struct {
 	mu        sync.Mutex //不是互斥锁 读完以后要移动链表
 	maxBytes  int64

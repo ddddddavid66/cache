@@ -1,14 +1,23 @@
 package cache
 
-import "context"
+import (
+	"context"
+	cachepb "newCache/api/proto"
+	"time"
+)
 
 type PeerPicker interface {
-	PickPeer(key string) (peer PeerGetter, ok bool, isSelf bool)
+	PickWritePeer(key string) (peer PeerGetter, ok bool, isSelf bool)
+	PickReadPeer(key string) (peer PeerGetter, ok bool, isSelf bool)
+	PickShadowPeer(key string) (peer PeerGetter, ok bool, isSelf bool)
 }
 
 type PeerGetter interface {
 	Get(ctx context.Context, group string, key string) ([]byte, error)
-	Set(ctx context.Context, group string, key string, value []byte) error // 实现远程同步 s
+	Delete(ctx context.Context, group string, key string, version int64) bool
+	Set(ctx context.Context, group string, key string, value []byte, version int64, ttl time.Duration) error
+	BatchSet(ctx context.Context, entries []*cachepb.CacheEntry) (bool, error)
+	Scan(ctx context.Context, group string, key string, count int64) ([]*cachepb.CacheEntry, error)
 }
 
 //`Group` 只依赖这两个接口。

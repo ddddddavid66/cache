@@ -2,6 +2,8 @@ package client
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log"
 	"newCache/cache"
 	"newCache/internal/consistenthash"
@@ -20,7 +22,9 @@ type Picker struct {
 	mu          sync.RWMutex
 	selfAddr    string
 	nodes       []string            // 所有的 ip:port 集合
-	ring        *consistenthash.Map // key 到节点的映射环
+	readRing    *consistenthash.Map // 读环 draining 状态 node准备下线
+	writeRing   *consistenthash.Map //写环 正常状态
+	shadowRing  *consistenthash.Map // 双写 warming状态 node准备上线
 	clients     map[string]*Client  // string 是 ip : port  etcd里面存储的才包括前缀
 	etcdCli     *clientv3.Client    // 比如 /cache/david-cache /   127.0.0.1:8001
 	prefix      string              //  比如 /cache/david-cache /   127.0.0.1:8001
@@ -42,10 +46,13 @@ func NewPicker(endpoints []string, svcName string, selfAddr string) (*Picker, er
 	if err != nil {
 		return nil, err
 	}
+
 	p := &Picker{
 		selfAddr:    selfAddr,
 		nodes:       make([]string, 0),
-		ring:        consistenthash.NewMap(defaultReplicas, nil),
+		readRing:    consistenthash.NewMap(defaultReplicas, nil),
+		writeRing:   consistenthash.NewMap(defaultReplicas, nil),
+		shadowRing:  consistenthash.NewMap(defaultReplicas, nil),
 		clients:     make(map[string]*Client),
 		prefix:      registry.ServicePrefix(svcName),
 		etcdCli:     etcdCli,
@@ -60,13 +67,45 @@ func NewPicker(endpoints []string, svcName string, selfAddr string) (*Picker, er
 }
 
 // 如果选中自己，返回 ok=true 且 isSelf=true，让 Group 走本地缓存或本地回源。
-func (p *Picker) PickPeer(key string) (peer cache.PeerGetter, ok bool, isSelf bool) {
-	p.mu.RLock() // 细节 写锁
+func (p *Picker) PickWritePeer(key string) (peer cache.PeerGetter, ok bool, isSelf bool) {
+	p.mu.RLock()
 	defer p.mu.RUnlock()
-	if key == "" || p.ring == nil || p.ring.Len() == 0 {
+	if key == "" || p.writeRing == nil || p.writeRing.Len() == 0 {
 		return nil, false, false
 	}
-	addr := p.ring.Get(key)
+	addr := p.writeRing.Get(key)
+	if addr == p.selfAddr {
+		return nil, true, true
+	}
+	client, ok := p.clients[addr]
+	if !ok {
+		return nil, false, false
+	}
+	return client, true, false
+}
+func (p *Picker) PickReadPeer(key string) (peer cache.PeerGetter, ok bool, isSelf bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if key == "" || p.readRing == nil || p.readRing.Len() == 0 {
+		return nil, false, false
+	}
+	addr := p.readRing.Get(key)
+	if addr == p.selfAddr {
+		return nil, true, true
+	}
+	client, ok := p.clients[addr]
+	if !ok {
+		return nil, false, false
+	}
+	return client, true, false
+}
+func (p *Picker) PickShadowPeer(key string) (peer cache.PeerGetter, ok bool, isSelf bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if key == "" || p.shadowRing == nil || p.shadowRing.Len() == 0 {
+		return nil, false, false
+	}
+	addr := p.shadowRing.Get(key)
 	if addr == p.selfAddr {
 		return nil, true, true
 	}
@@ -77,11 +116,26 @@ func (p *Picker) PickPeer(key string) (peer cache.PeerGetter, ok bool, isSelf bo
 	return client, true, false
 }
 
+func (p *Picker) PickPeerByAddr(addr string) (cache.PeerGetter, error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if addr == "" {
+		return nil, fmt.Errorf("addr is nil")
+	}
+	client, ok := p.clients[addr]
+	if !ok {
+		return nil, fmt.Errorf("the client of addr:%s error", addr)
+	}
+	return client, nil
+}
+
 func (p *Picker) Close() error {
 	p.mu.Lock()
 	clients := p.clients
 	p.nodes = nil
-	p.ring = consistenthash.NewMap(defaultReplicas, nil)
+	p.writeRing = consistenthash.NewMap(defaultReplicas, nil)
+	p.readRing = consistenthash.NewMap(defaultReplicas, nil)
+	p.shadowRing = consistenthash.NewMap(defaultReplicas, nil)
 	p.clients = nil
 	etcdCli := p.etcdCli
 	closeClient := p.closeClient
@@ -102,12 +156,21 @@ func (p *Picker) reload(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	nodes := make([]string, 0, len(resp.Kvs))
+	nodes := make([]registry.NodeInfo, 0, len(resp.Kvs))
+	addrs := make([]string, 0, len(resp.Kvs))
 	clients := make(map[string]*Client)
 	oldClients := p.snapshotClients()
 	for _, kv := range resp.Kvs {
-		addr := string(kv.Value) // 新地址
-		nodes = append(nodes, addr)
+		var info registry.NodeInfo
+		if err := json.Unmarshal(kv.Value, &info); err != nil {
+			info = registry.NodeInfo{
+				Addr:   string(kv.Value),
+				Status: registry.StatusActive,
+			}
+		}
+		addr := info.Addr // NOTE 细节 兼容
+		addrs = append(addrs, addr)
+		nodes = append(nodes, info)
 		if addr == p.selfAddr {
 			continue
 		}
@@ -121,15 +184,16 @@ func (p *Picker) reload(ctx context.Context) error {
 		}
 		clients[addr] = client
 	}
-	sort.Strings(nodes) // 排序
-	p.SetPeers(nodes, clients)
+	sort.Strings(addrs) // 排序
+
+	readRing, writeRing, shadowRing := p.buildRings(nodes) // 初始化环
+
+	p.SetPeers(addrs, clients, readRing, writeRing, shadowRing)
 	return nil
 }
 
-func (p *Picker) SetPeers(nodes []string, clients map[string]*Client) {
+func (p *Picker) SetPeers(nodes []string, clients map[string]*Client, readRing, writeRing, shadowRing *consistenthash.Map) {
 	copiedNodes := append([]string(nil), nodes...)
-	ring := consistenthash.NewMap(defaultReplicas, nil) // 重建hash环
-	ring.Add(copiedNodes...)
 
 	copiedMap := make(map[string]*Client, len(clients))
 	for addr, client := range clients {
@@ -141,7 +205,9 @@ func (p *Picker) SetPeers(nodes []string, clients map[string]*Client) {
 	closeClient := p.closeClient
 	p.clients = copiedMap
 	p.nodes = copiedNodes
-	p.ring = ring
+	p.writeRing = writeRing // reload 里面替换环
+	p.readRing = readRing
+	p.shadowRing = shadowRing
 	p.mu.Unlock()
 
 	for addr, oldClient := range oldClients {
@@ -183,4 +249,23 @@ func closePickerClient(closeClient func(*Client) error, client *Client) error {
 		return closeClient(client)
 	}
 	return client.Close()
+}
+
+func (p *Picker) buildRings(nodes []registry.NodeInfo) (readRing, writeRing, shadowRing *consistenthash.Map) {
+	readRing = consistenthash.NewMap(defaultReplicas, nil)
+	writeRing = consistenthash.NewMap(defaultReplicas, nil)
+	shadowRing = consistenthash.NewMap(defaultReplicas, nil)
+	for _, n := range nodes {
+		switch n.Status {
+		case registry.StatusActive:
+			readRing.Add(n.Addr)
+			writeRing.Add(n.Addr)
+			shadowRing.Add(n.Addr)
+		case registry.StatusWarming:
+			shadowRing.Add(n.Addr)
+		case registry.StatusDraining:
+			readRing.Add(n.Addr)
+		}
+	}
+	return readRing, writeRing, shadowRing
 }

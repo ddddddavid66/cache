@@ -117,5 +117,8 @@ func (c *Client) BatchSet(ctx context.Context, entries []*cachepb.CacheEntry) (b
 		return false, fmt.Errorf("resp error")
 	}
 	return true, nil
+}
 
+func (c *Client) PeerID() string {
+	return c.addr
 }

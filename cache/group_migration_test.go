@@ -79,23 +79,25 @@ func TestGroupDeleteRoutesNonPeerWriteToOwner(t *testing.T) {
 
 func TestGroupTrySyncSetEnqueuesRetryWithCopiedValue(t *testing.T) {
 	peer := &recordingPeer{setErr: errors.New("set failed")}
+	retryQueue := newTestRetryQueue()
 	g := &Group{
-		name:    "retry-set",
-		peers:   &staticPeerPicker{shadowPeer: peer, shadowOK: true},
-		retryCh: make(chan syncTask, 1),
-		closeCh: make(chan struct{}),
+		name:         "retry-set",
+		peers:        &staticPeerPicker{shadowPeer: peer, shadowOK: true},
+		retryQueue:   retryQueue,
+		closeCh:      make(chan struct{}),
+		peerLimiters: make(map[string]chan struct{}),
 	}
 
 	value := []byte("value")
 	g.trySyncSet("k", value, 101, 4*time.Second)
 	value[0] = 'X'
 
-	task := readRetryTask(t, g.retryCh)
-	if task.option != syncSet || task.key != "k" || task.version != 101 || task.ttl != 4*time.Second || task.attempt != 1 {
+	task := readRetryTask(t, retryQueue)
+	if task.Option != syncSet || task.Key != "k" || task.Version != 101 || task.TTL != 4*time.Second || task.Attempt != 1 {
 		t.Fatalf("retry task = %+v, want set key/version/ttl/attempt", task)
 	}
-	if string(task.value) != "value" {
-		t.Fatalf("retry task value = %q, want copied %q", string(task.value), "value")
+	if string(task.Value) != "value" {
+		t.Fatalf("retry task value = %q, want copied %q", string(task.Value), "value")
 	}
 	if !peer.fromPeer {
 		t.Fatal("shadow Set context is not marked from peer")
@@ -104,17 +106,19 @@ func TestGroupTrySyncSetEnqueuesRetryWithCopiedValue(t *testing.T) {
 
 func TestGroupTrySyncDeleteEnqueuesRetry(t *testing.T) {
 	peer := &recordingPeer{deleteOK: false}
+	retryQueue := newTestRetryQueue()
 	g := &Group{
-		name:    "retry-delete",
-		peers:   &staticPeerPicker{shadowPeer: peer, shadowOK: true},
-		retryCh: make(chan syncTask, 1),
-		closeCh: make(chan struct{}),
+		name:         "retry-delete",
+		peers:        &staticPeerPicker{shadowPeer: peer, shadowOK: true},
+		retryQueue:   retryQueue,
+		closeCh:      make(chan struct{}),
+		peerLimiters: make(map[string]chan struct{}),
 	}
 
 	g.trySyncDelete("k", 202)
 
-	task := readRetryTask(t, g.retryCh)
-	if task.option != syncDelete || task.key != "k" || task.version != 202 || task.attempt != 1 {
+	task := readRetryTask(t, retryQueue)
+	if task.Option != syncDelete || task.Key != "k" || task.Version != 202 || task.Attempt != 1 {
 		t.Fatalf("retry task = %+v, want delete key/version/attempt", task)
 	}
 	if !peer.fromPeer {
@@ -251,10 +255,10 @@ func TestGroupMigrationScanBatchSetKeepsKeyReadable(t *testing.T) {
 	}
 }
 
-func readRetryTask(t *testing.T, ch <-chan syncTask) syncTask {
+func readRetryTask(t *testing.T, q *testRetryQueue) syncTask {
 	t.Helper()
 	select {
-	case task := <-ch:
+	case task := <-q.ch:
 		return task
 	default:
 		t.Fatal("retry task was not enqueued")

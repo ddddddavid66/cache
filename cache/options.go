@@ -1,6 +1,8 @@
 package cache
 
 import (
+	retryqueue "newCache/internal/retry-queue"
+	"newCache/internal/wal"
 	"newCache/store"
 	"time"
 )
@@ -47,5 +49,37 @@ func WithOnEvicted(fn func(string, store.Value)) Option {
 func WithTombStoneTTL(d time.Duration) Option {
 	return func(c *cacheConfig) {
 		c.tombstoneTTL = d
+	}
+}
+
+type GroupOption func(*groupOptions)
+
+type groupOptions struct {
+	retryQueue retryqueue.RetryQueue
+	walWriter  *wal.Writer
+	walPath    string
+}
+
+func WithRetryQueue(q retryqueue.RetryQueue) GroupOption {
+	return func(cfg *groupOptions) {
+		if q != nil {
+			cfg.retryQueue = q
+		}
+	}
+}
+
+func WithWalWriter(wal *wal.Writer) GroupOption {
+	return func(c *groupOptions) {
+		if wal != nil {
+			c.walWriter = wal
+		}
+	}
+}
+
+func WithWalPath(path string) GroupOption {
+	return func(c *groupOptions) {
+		if path != "" {
+			c.walPath = path
+		}
 	}
 }

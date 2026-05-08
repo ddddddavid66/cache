@@ -154,7 +154,7 @@ func TestIntegrationNodeProcess(t *testing.T) {
 
 	group := cache.NewGroup(groupName, 4<<20, cache.GetterFunc(func(ctx context.Context, key string) ([]byte, error) {
 		return nil, cache.ErrKey
-	}), srv.WorkID())
+	}), srv.WorkID(), cache.WithRetryQueue(newTestRetryQueue()))
 	picker, err := client.NewPicker(endpoints, svcName, addr)
 	if err != nil {
 		t.Fatalf("NewPicker() error = %v", err)

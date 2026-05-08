@@ -5,17 +5,21 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"math/rand"
+	"path/filepath"
 	"sync"
 	"time"
 
+	retryqueue "newCache/internal/retry-queue"
 	"newCache/internal/singleflight"
+	"newCache/internal/wal"
 	"newCache/store"
 )
 
 var ErrKeyRequired = fmt.Errorf("key is required")
 var ErrValueRequired = fmt.Errorf("value is required")
 var ErrKey = fmt.Errorf("key is not exists")
+var ErrGroupClose = fmt.Errorf("group closed")
+
 var nullMaker = &ByteView{b: []byte(nil)}
 var ttl = 5 * time.Minute
 
@@ -36,33 +40,30 @@ type Group struct {
 	loadSem     chan struct{} // 限流令牌 防止缓存雪崩
 	bloomFilter *BloomFilter
 
-	retryCh      chan syncTask
-	closeCh      chan struct{} // 关闭 retryCh
+	retryQueue retryqueue.RetryQueue //轻量级自己实现的 消息队列
+	closeCh    chan struct{}         // 关闭 retryCh
+	workerWg   sync.WaitGroup        //启动 队列
+	//peer 限流加
+	peerLimiterMu sync.Mutex
+	peerLimiters  map[string]chan struct{}
+
 	versionGen   *Snowflake    // version 生成
 	tombstoneTTL time.Duration // 墓碑TTL
+
+	walWriter *wal.Writer
+	walPath   string
 }
 
-type syncTask struct { // owner 重试队列
-	key     string
-	value   []byte
-	attempt int
-	version int64
-	ttl     time.Duration
-	option  string // ?
-}
+type syncTask = retryqueue.SyncTask
 
 const ( // option 操作
 	syncSet    = "set"
 	syncDelete = "delete"
 
-	maxRetryAttempts = 10
-	baseRetryDelay   = 100 * time.Millisecond
-	maxRetryDelay    = 10 * time.Second
-
-	maxRetryWorkers = 5
+	maxRetryWorkers = 8
 )
 
-func NewGroup(name string, cacheBytes int64, getter Getter, workID int64) *Group {
+func NewGroup(name string, cacheBytes int64, getter Getter, workID int64, opts ...GroupOption) *Group {
 	// 检查
 	if getter == nil {
 		panic("nil Getter")
@@ -73,20 +74,37 @@ func NewGroup(name string, cacheBytes int64, getter Getter, workID int64) *Group
 	mu.Lock()
 	defer mu.Unlock()
 
+	cfg := &groupOptions{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
 	g := &Group{
 		name:         name,
 		getter:       getter,
 		mainCache:    NewCache(cacheBytes), //新建缓存
 		loader:       singleflight.NewGroup(),
 		loadSem:      make(chan struct{}, 100),
-		retryCh:      make(chan syncTask, 1024), // TODO 真实生产要考虑持久化、限流、丢弃策略
+		retryQueue:   cfg.retryQueue,
 		versionGen:   NewSnowflake(workID),
 		tombstoneTTL: deleteTomestoneTTL, //TODO 后面可以改成 options
 		closeCh:      make(chan struct{}),
+		peerLimiters: make(map[string]chan struct{}),
+		walWriter:    cfg.walWriter,
+		walPath:      cfg.walPath,
 	}
+
+	if cfg.walPath != "" {
+		walDir := filepath.Dir(cfg.walPath)
+		if _, err := wal.ReplayAll(walDir, cfg.walPath, g.replayConfig()); err != nil {
+			panic(fmt.Errorf("replay wal: %w", err))
+		}
+	}
+
 	groups[name] = g //注册全局group
 
 	for i := 0; i < maxRetryWorkers; i++ {
+		g.workerWg.Add(1)
 		go g.retryLoop()
 	}
 
@@ -154,6 +172,24 @@ func (g *Group) Set(ctx context.Context, key string, value []byte, version int64
 	if !isPeer(ctx) && g.peers != nil {
 		if peer, ok, isSelf := g.peers.PickWritePeer(key); !isSelf && ok {
 			return peer.Set(ctx, g.name, key, value, version, ttl)
+		}
+	}
+
+	//先写WAL  再写入内存
+	expiredAt := int64(0)
+	if ttl > 0 {
+		expiredAt = time.Now().Add(ttl).UnixNano()
+	}
+	if g.walWriter != nil {
+		if err := g.walWriter.Append(wal.Record{
+			Type:      wal.RecordSet,
+			Key:       key,
+			Value:     value,
+			Version:   version,
+			TTL:       ttl,
+			ExpiredAt: expiredAt,
+		}); err != nil {
+			return fmt.Errorf("wal write: %w", err)
 		}
 	}
 
@@ -286,6 +322,19 @@ func (g *Group) DeleteWithVersion(ctx context.Context, key string, version int64
 		return false
 	}
 
+	//写wal
+	if g.walWriter != nil {
+		if err := g.walWriter.Append(wal.Record{
+			Type:    wal.RecordDelete,
+			Key:     key,
+			Version: version,
+		}); err != nil {
+			log.Printf("[cache] wal write failed for delete: %v", err)
+			// tombstone 更重要 不会阻塞  即使丢失了 也有retryQueue 兜底
+			//TODO  可能会导致短期不一致
+		}
+	}
+
 	tombstone := NewTombstone(version, deleteTomestoneTTL)
 	err := g.mainCache.Set(key, tombstone)
 	if err != nil {
@@ -308,6 +357,14 @@ func (g *Group) Close() error {
 	}
 	mu.Unlock()
 	close(g.closeCh)
+
+	//先关闭队列，让 Dequeue 返回 ErrQueueClosed
+	if g.retryQueue != nil {
+		_ = g.retryQueue.Close()
+	}
+	//等待所有的worker退出
+	g.workerWg.Wait()
+
 	// 关闭 peerpicke
 	if clsoer, ok := g.peers.(interface{ Close() error }); ok {
 		_ = clsoer.Close()
@@ -367,92 +424,97 @@ func WithPeer(ctx context.Context) context.Context {
 // }
 
 func (g *Group) enqueueRetry(task syncTask) {
-	if task.value != nil {
-		task.value = append([]byte(nil), task.value...) // 复制
+	if task.Value != nil {
+		task.Value = append([]byte(nil), task.Value...) // 复制
 	}
-	select {
-	case g.retryCh <- task:
-	case <-g.closeCh:
-		return
-	default:
-		log.Printf("[cache] retry queue full, drop sync task: group=%s key=%s", g.name, task.key)
+	if task.ID == "" {
+		task.ID = retryqueue.RetryTaskId(g.name, task.Key, task.Option, task.Version)
+	}
+	if task.Attempt < 1 {
+		task.Attempt = 1
+	}
+	task.NextRunAt = time.Now().Add(retryqueue.Backoff(task.Attempt))
+
+	if err := g.retryQueue.Enqueue(task); err != nil {
+		log.Printf("[cache] persist retry task failed: group=%s key=%s err=%v", g.name, task.Key, err)
 	}
 }
 
 func (g *Group) retryLoop() { // NOTE 避免 因为休眠导致的关闭延时
+	defer g.workerWg.Done()
+
 	for {
-		select {
-		case task := <-g.retryCh:
-			g.handleRetry(task)
-		case <-g.closeCh:
-			return
+		task, err := g.retryQueue.Dequeue(context.Background())
+		if err != nil {
+			if errors.Is(err, retryqueue.ErrQueueClosed) {
+				return
+			}
+			select {
+			case <-g.closeCh:
+				return
+			default:
+			}
+			continue
 		}
+		err = g.executeRetryTask(task)
+		if err != nil {
+			_ = g.retryQueue.Nack(task, err)
+			continue
+		}
+		_ = g.retryQueue.Ack(task.ID)
+
 	}
 }
 
-func (g *Group) handleRetry(task syncTask) {
-	delay := backoff(task.attempt)
-	timer := time.NewTimer(delay)
-	select {
-	case <-timer.C:
-		var err error
-		switch task.option {
-		case syncSet:
-			err = g.syncShadowSet(task.key, task.value, task.version, task.ttl)
-		case syncDelete:
-			err = g.syncShadowDelete(task.key, task.version)
-		default:
-			return
-		}
-		if err == nil {
-			return
-		}
-		task.attempt++
-		if task.attempt > 10 {
-			log.Printf("[cache] sync retry exceeded: group=%s key=%s err=%v", g.name, task.key, err)
-			return
-		}
-		g.enqueueRetry(task)
-	case <-g.closeCh:
-		timer.Stop()
-		return
+func (g *Group) executeRetryTask(task syncTask) error {
+	switch task.Option {
+	case syncSet:
+		return g.syncShadowSet(task.Key, task.Value, task.Version, task.TTL)
+	case syncDelete:
+		return g.syncShadowDelete(task.Key, task.Version)
+	default:
+		return fmt.Errorf("unknown retry option: %s", task.Option)
 	}
-}
-
-// 指数回避  实现
-func backoff(attempt int) time.Duration {
-	if attempt < 1 {
-		attempt = 1
-	}
-	delay := baseRetryDelay << (attempt - 1)
-	if delay > maxRetryDelay {
-		delay = maxRetryDelay
-	}
-	// 随机抖动 防止同一时刻所有任务并发执行
-	jitter := time.Duration(rand.Int63n(int64(delay / 2)))
-	return delay/2 + jitter
 }
 
 func (g *Group) trySyncSet(key string, value []byte, version int64, ttl time.Duration) {
 	if err := g.syncShadowSet(key, value, version, ttl); err != nil {
+		// WAL  兜底方案
+		if g.walWriter != nil {
+			_ = g.walWriter.Append(wal.Record{
+				Type:    wal.RecordShadowRetrySet,
+				Key:     key,
+				Value:   value,
+				TTL:     ttl,
+				Version: version,
+			})
+		}
 		g.enqueueRetry(syncTask{
-			key:     key,
-			value:   value,
-			version: version,
-			ttl:     ttl,
-			attempt: 1,
-			option:  syncSet,
+			Key:     key,
+			Value:   value,
+			Version: version,
+			TTL:     ttl,
+			Attempt: 1,
+			Option:  syncSet,
 		})
 	}
 }
 
 func (g *Group) trySyncDelete(key string, version int64) {
 	if err := g.syncShadowDelete(key, version); err != nil {
+		// WAL  兜底方案
+		if g.walWriter != nil {
+			_ = g.walWriter.Append(wal.Record{
+				Type:    wal.RecordShadowRetryDelete,
+				Key:     key,
+				Version: version,
+			})
+		}
 		g.enqueueRetry(syncTask{
-			key:     key,
-			version: version,
-			attempt: 1,
-			option:  syncDelete,
+			Key:     key,
+			Version: version,
+			Attempt: 1,
+			Option:  syncDelete,
 		})
 	}
 }
@@ -526,13 +588,15 @@ func (g *Group) syncShadowSet(key string, value []byte, version int64, ttl time.
 	if !ok || isSelf {
 		return nil
 	}
-	//设置超时时间
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-	ctx = WithPeer(ctx)
-	//开始双写  写入期间的判断 peer的set实现
-	err := peer.Set(ctx, g.name, key, value, version, ttl)
-	return err
+	return g.withPeerLimit(peer, func() error {
+		//设置超时时间
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		defer cancel()
+		ctx = WithPeer(ctx)
+		//开始双写  写入期间的判断 peer的set实现
+		err := peer.Set(ctx, g.name, key, value, version, ttl)
+		return err
+	})
 }
 
 // 影子删除  删除的时候 随着迁移到新节点 删除旧节点的数据
@@ -544,12 +608,106 @@ func (g *Group) syncShadowDelete(key string, version int64) error {
 	if !ok || isSelf {
 		return nil
 	}
-	//设置超时时间
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-	ctx = WithPeer(ctx)
-	if ok := peer.Delete(ctx, g.name, key, version); !ok {
-		return fmt.Errorf("shadowDelete err")
+
+	return g.withPeerLimit(peer, func() error {
+		//设置超时时间
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		defer cancel()
+		ctx = WithPeer(ctx)
+		if ok := peer.Delete(ctx, g.name, key, version); !ok {
+			return fmt.Errorf("shadowDelete err")
+		}
+		return nil
+	})
+
+}
+
+// peer 限流 每一个peerID 只能有2个请求
+func (g *Group) getPeerLimiter(peerID string) chan struct{} {
+	g.peerLimiterMu.Lock()
+	defer g.peerLimiterMu.Unlock()
+
+	limiter, ok := g.peerLimiters[peerID]
+	if ok {
+		return limiter
 	}
-	return nil
+	limiter = make(chan struct{}, 2)
+	g.peerLimiters[peerID] = limiter
+	return limiter
+}
+
+// 包装远程调用
+func (g *Group) withPeerLimit(peer PeerGetter, fn func() error) error {
+	peerID := "unknwon"
+	if p, ok := peer.(interface {
+		PeerID() string
+	}); ok {
+		peerID = p.PeerID()
+	}
+	limiter := g.getPeerLimiter(peerID)
+	select {
+	case limiter <- struct{}{}:
+		defer func() { <-limiter }()
+		return fn()
+	case <-g.closeCh:
+		return ErrGroupClose
+	}
+}
+
+func (g *Group) replayConfig() wal.ReplayConfig {
+	return wal.ReplayConfig{
+		SetFn: func(key string, value []byte, version int64, ttl time.Duration) {
+			old, ok := g.mainCache.GetEntry(key)
+			if ok && version < old.Version {
+				return
+			}
+
+			entry := NewCacheEntry(NewByteView(value), version, ttl)
+			_ = g.populateEntry(key, entry)
+
+			if g.bloomFilter != nil {
+				g.bloomFilter.Add(key)
+			}
+		},
+		DeleteFn: func(key string, version int64) {
+			old, ok := g.mainCache.GetEntry(key)
+			if ok && version < old.Version {
+				return
+			}
+			tombstone := NewTombstone(version, ttl)
+			_ = g.populateEntry(key, tombstone)
+
+			if g.bloomFilter != nil {
+				g.bloomFilter.Add(key)
+			}
+		},
+
+		ShadowRetrySet: func(key string, value []byte, version int64, ttl time.Duration) {
+			if g.retryQueue == nil {
+				return
+			}
+
+			g.enqueueRetry(syncTask{
+				Key:     key,
+				Value:   value,
+				Version: version,
+				TTL:     ttl,
+				Attempt: 1,
+				Option:  syncSet,
+			})
+		},
+
+		ShadowRetryDelete: func(key string, version int64) {
+			if g.retryQueue == nil {
+				return
+			}
+
+			g.enqueueRetry(syncTask{
+				Key:     key,
+				Version: version,
+				Attempt: 1,
+				Option:  syncDelete,
+			})
+		},
+	}
 }

@@ -135,7 +135,7 @@ func newServerTestGroup(t *testing.T, name string) (*cache.Group, string) {
 	groupName := fmt.Sprintf("%s-%d", name, id)
 	g := cache.NewGroup(groupName, 1024, cache.GetterFunc(func(ctx context.Context, key string) ([]byte, error) {
 		return nil, cache.ErrKey
-	}), id)
+	}), id, cache.WithRetryQueue(newTestRetryQueue()))
 	t.Cleanup(func() {
 		_ = g.Close()
 	})

@@ -20,7 +20,6 @@ type Cache struct {
 }
 
 // Simple 占位
-// 后续跟高级  func NewCache(maxBytes int64, opts ...Option) *Cache
 func NewCache(maxBytes int64, opts ...Option) *Cache {
 	cfg := &cacheConfig{ // 默认创建 LRU2
 		storeType:   "LRU2",

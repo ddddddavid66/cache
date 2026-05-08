@@ -146,7 +146,7 @@ func newTestGroup(t *testing.T, name string, getter Getter) *Group {
 		})
 	}
 	id := atomic.AddInt64(&testGroupSeq, 1)
-	g := NewGroup(fmt.Sprintf("%s-%d", name, id), 1024, getter, id)
+	g := NewGroup(fmt.Sprintf("%s-%d", name, id), 1024, getter, id, WithRetryQueue(newTestRetryQueue()))
 	t.Cleanup(func() {
 		_ = g.Close()
 	})

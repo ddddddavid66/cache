@@ -10,6 +10,7 @@ service CacheService {
   rpc Delete(DeleteRequest) returns (DeleteResponse);
   rpc Scan(ScanRequest) returns (ScanResponse);
   rpc BatchSet(BatchRequest) returns (BatchResponse);
+  rpc Active(ActiveRequest) returns (ActiveResponse);
 }
 
 message GetRequest {
@@ -71,5 +72,13 @@ message BatchRequest {
 }
 
 message BatchResponse {
+  bool ok = 1;
+}
+
+message ActiveRequest {
+
+}
+
+message ActiveResponse {
   bool ok = 1;
 }

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net"
 	cachepb "newCache/api/proto"
 	"newCache/cache"
@@ -174,4 +175,14 @@ func (s *Server) BatchSet(ctx context.Context, req *cachepb.BatchRequest) (*cach
 		return nil, err
 	}
 	return &cachepb.BatchResponse{Ok: true}, nil
+}
+
+func (s *Server) Activate(ctx context.Context, req *cachepb.ActiveRequest) (*cachepb.ActiveResponse, error) {
+	if s.registry == nil {
+		return nil, errors.New("etcd registry not found")
+	}
+	if err := s.registry.UpdateStatus(ctx, registry.StatusActive); err != nil {
+		return nil, status.Errorf(codes.Internal, "activate node: %v", err)
+	}
+	return &cachepb.ActiveResponse{Ok: true}, nil
 }

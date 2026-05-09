@@ -18,7 +18,7 @@ type defaultLogger struct {
 	l *slog.Logger
 }
 
-func newDefaultLogger() *defaultLogger {
+func NewDefaultLogger() *defaultLogger {
 	return &defaultLogger{
 		l: slog.New(slog.NewJSONHandler(
 			os.Stderr, &slog.HandlerOptions{

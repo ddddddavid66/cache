@@ -18,7 +18,7 @@ type queueConfig struct {
 
 func defalutQueueConfig() queueConfig {
 	return queueConfig{
-		logger:       newDefaultLogger(),
+		logger:       NewDefaultLogger(),
 		scanInterval: defaultScanInterval,
 		leaseDul:     defaultLeaseDur,
 		maxAttemts:   defaultMaxAttempts,

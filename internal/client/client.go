@@ -122,3 +122,14 @@ func (c *Client) BatchSet(ctx context.Context, entries []*cachepb.CacheEntry) (b
 func (c *Client) PeerID() string {
 	return c.addr
 }
+
+func (c *Client) Active(ctx context.Context) error {
+	resp, err := c.cli.Active(ctx, &cachepb.ActiveRequest{})
+	if err != nil {
+		return err
+	}
+	if !resp.Ok {
+		return fmt.Errorf("resp error")
+	}
+	return nil
+}

@@ -649,6 +649,86 @@ func (x *BatchResponse) GetOk() bool {
 	return false
 }
 
+type ActiveRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ActiveRequest) Reset() {
+	*x = ActiveRequest{}
+	mi := &file_api_proto_cache_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ActiveRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ActiveRequest) ProtoMessage() {}
+
+func (x *ActiveRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_cache_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ActiveRequest.ProtoReflect.Descriptor instead.
+func (*ActiveRequest) Descriptor() ([]byte, []int) {
+	return file_api_proto_cache_proto_rawDescGZIP(), []int{11}
+}
+
+type ActiveResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ok            bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ActiveResponse) Reset() {
+	*x = ActiveResponse{}
+	mi := &file_api_proto_cache_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ActiveResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ActiveResponse) ProtoMessage() {}
+
+func (x *ActiveResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_cache_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ActiveResponse.ProtoReflect.Descriptor instead.
+func (*ActiveResponse) Descriptor() ([]byte, []int) {
+	return file_api_proto_cache_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ActiveResponse) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
 var File_api_proto_cache_proto protoreflect.FileDescriptor
 
 const file_api_proto_cache_proto_rawDesc = "" +
@@ -696,13 +776,17 @@ const file_api_proto_cache_proto_rawDesc = "" +
 	"\fBatchRequest\x12-\n" +
 	"\aentries\x18\x01 \x03(\v2\x13.cachepb.CacheEntryR\aentries\"\x1f\n" +
 	"\rBatchResponse\x12\x0e\n" +
-	"\x02ok\x18\x01 \x01(\bR\x02ok2\x9d\x02\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok\"\x0f\n" +
+	"\rActiveRequest\" \n" +
+	"\x0eActiveResponse\x12\x0e\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok2\xd8\x02\n" +
 	"\fCacheService\x120\n" +
 	"\x03Get\x12\x13.cachepb.GetRequest\x1a\x14.cachepb.GetResponse\x120\n" +
 	"\x03Set\x12\x13.cachepb.SetRequest\x1a\x14.cachepb.SetResponse\x129\n" +
 	"\x06Delete\x12\x16.cachepb.DeleteRequest\x1a\x17.cachepb.DeleteResponse\x123\n" +
 	"\x04Scan\x12\x14.cachepb.ScanRequest\x1a\x15.cachepb.ScanResponse\x129\n" +
-	"\bBatchSet\x12\x15.cachepb.BatchRequest\x1a\x16.cachepb.BatchResponseB\x1cZ\x1anewCache/api/proto;cachepbb\x06proto3"
+	"\bBatchSet\x12\x15.cachepb.BatchRequest\x1a\x16.cachepb.BatchResponse\x129\n" +
+	"\x06Active\x12\x16.cachepb.ActiveRequest\x1a\x17.cachepb.ActiveResponseB\x1cZ\x1anewCache/api/proto;cachepbb\x06proto3"
 
 var (
 	file_api_proto_cache_proto_rawDescOnce sync.Once
@@ -716,7 +800,7 @@ func file_api_proto_cache_proto_rawDescGZIP() []byte {
 	return file_api_proto_cache_proto_rawDescData
 }
 
-var file_api_proto_cache_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_api_proto_cache_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_api_proto_cache_proto_goTypes = []any{
 	(*GetRequest)(nil),     // 0: cachepb.GetRequest
 	(*GetResponse)(nil),    // 1: cachepb.GetResponse
@@ -729,6 +813,8 @@ var file_api_proto_cache_proto_goTypes = []any{
 	(*ScanResponse)(nil),   // 8: cachepb.ScanResponse
 	(*BatchRequest)(nil),   // 9: cachepb.BatchRequest
 	(*BatchResponse)(nil),  // 10: cachepb.BatchResponse
+	(*ActiveRequest)(nil),  // 11: cachepb.ActiveRequest
+	(*ActiveResponse)(nil), // 12: cachepb.ActiveResponse
 }
 var file_api_proto_cache_proto_depIdxs = []int32{
 	6,  // 0: cachepb.ScanResponse.entries:type_name -> cachepb.CacheEntry
@@ -738,13 +824,15 @@ var file_api_proto_cache_proto_depIdxs = []int32{
 	4,  // 4: cachepb.CacheService.Delete:input_type -> cachepb.DeleteRequest
 	7,  // 5: cachepb.CacheService.Scan:input_type -> cachepb.ScanRequest
 	9,  // 6: cachepb.CacheService.BatchSet:input_type -> cachepb.BatchRequest
-	1,  // 7: cachepb.CacheService.Get:output_type -> cachepb.GetResponse
-	3,  // 8: cachepb.CacheService.Set:output_type -> cachepb.SetResponse
-	5,  // 9: cachepb.CacheService.Delete:output_type -> cachepb.DeleteResponse
-	8,  // 10: cachepb.CacheService.Scan:output_type -> cachepb.ScanResponse
-	10, // 11: cachepb.CacheService.BatchSet:output_type -> cachepb.BatchResponse
-	7,  // [7:12] is the sub-list for method output_type
-	2,  // [2:7] is the sub-list for method input_type
+	11, // 7: cachepb.CacheService.Active:input_type -> cachepb.ActiveRequest
+	1,  // 8: cachepb.CacheService.Get:output_type -> cachepb.GetResponse
+	3,  // 9: cachepb.CacheService.Set:output_type -> cachepb.SetResponse
+	5,  // 10: cachepb.CacheService.Delete:output_type -> cachepb.DeleteResponse
+	8,  // 11: cachepb.CacheService.Scan:output_type -> cachepb.ScanResponse
+	10, // 12: cachepb.CacheService.BatchSet:output_type -> cachepb.BatchResponse
+	12, // 13: cachepb.CacheService.Active:output_type -> cachepb.ActiveResponse
+	8,  // [8:14] is the sub-list for method output_type
+	2,  // [2:8] is the sub-list for method input_type
 	2,  // [2:2] is the sub-list for extension type_name
 	2,  // [2:2] is the sub-list for extension extendee
 	0,  // [0:2] is the sub-list for field type_name
@@ -761,7 +849,7 @@ func file_api_proto_cache_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_cache_proto_rawDesc), len(file_api_proto_cache_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

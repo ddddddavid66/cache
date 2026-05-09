@@ -560,7 +560,7 @@ func (g *Group) BatchSet(ctx context.Context, entires []TransportEntry) error {
 		default:
 		}
 		old, ok := g.mainCache.GetEntry(entry.Key)
-		if ok && old.Version > entry.Version { //版本旧
+		if ok && old.Version >= entry.Version { //版本旧  version 一样就不写 降低压力
 			continue
 		}
 		//更新ttl
@@ -710,4 +710,11 @@ func (g *Group) replayConfig() wal.ReplayConfig {
 			})
 		},
 	}
+}
+
+func (g *Group) DeleteLocalForGC(key string) bool {
+	if key == "" {
+		return false
+	}
+	return g.mainCache.Delete(key)
 }

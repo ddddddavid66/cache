@@ -24,6 +24,7 @@ const (
 	CacheService_Delete_FullMethodName   = "/cachepb.CacheService/Delete"
 	CacheService_Scan_FullMethodName     = "/cachepb.CacheService/Scan"
 	CacheService_BatchSet_FullMethodName = "/cachepb.CacheService/BatchSet"
+	CacheService_Active_FullMethodName   = "/cachepb.CacheService/Active"
 )
 
 // CacheServiceClient is the client API for CacheService service.
@@ -35,6 +36,7 @@ type CacheServiceClient interface {
 	Delete(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*DeleteResponse, error)
 	Scan(ctx context.Context, in *ScanRequest, opts ...grpc.CallOption) (*ScanResponse, error)
 	BatchSet(ctx context.Context, in *BatchRequest, opts ...grpc.CallOption) (*BatchResponse, error)
+	Active(ctx context.Context, in *ActiveRequest, opts ...grpc.CallOption) (*ActiveResponse, error)
 }
 
 type cacheServiceClient struct {
@@ -95,6 +97,16 @@ func (c *cacheServiceClient) BatchSet(ctx context.Context, in *BatchRequest, opt
 	return out, nil
 }
 
+func (c *cacheServiceClient) Active(ctx context.Context, in *ActiveRequest, opts ...grpc.CallOption) (*ActiveResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ActiveResponse)
+	err := c.cc.Invoke(ctx, CacheService_Active_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CacheServiceServer is the server API for CacheService service.
 // All implementations must embed UnimplementedCacheServiceServer
 // for forward compatibility.
@@ -104,6 +116,7 @@ type CacheServiceServer interface {
 	Delete(context.Context, *DeleteRequest) (*DeleteResponse, error)
 	Scan(context.Context, *ScanRequest) (*ScanResponse, error)
 	BatchSet(context.Context, *BatchRequest) (*BatchResponse, error)
+	Active(context.Context, *ActiveRequest) (*ActiveResponse, error)
 	mustEmbedUnimplementedCacheServiceServer()
 }
 
@@ -128,6 +141,9 @@ func (UnimplementedCacheServiceServer) Scan(context.Context, *ScanRequest) (*Sca
 }
 func (UnimplementedCacheServiceServer) BatchSet(context.Context, *BatchRequest) (*BatchResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method BatchSet not implemented")
+}
+func (UnimplementedCacheServiceServer) Active(context.Context, *ActiveRequest) (*ActiveResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Active not implemented")
 }
 func (UnimplementedCacheServiceServer) mustEmbedUnimplementedCacheServiceServer() {}
 func (UnimplementedCacheServiceServer) testEmbeddedByValue()                      {}
@@ -240,6 +256,24 @@ func _CacheService_BatchSet_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CacheService_Active_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ActiveRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CacheServiceServer).Active(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CacheService_Active_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CacheServiceServer).Active(ctx, req.(*ActiveRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CacheService_ServiceDesc is the grpc.ServiceDesc for CacheService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -266,6 +300,10 @@ var CacheService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "BatchSet",
 			Handler:    _CacheService_BatchSet_Handler,
+		},
+		{
+			MethodName: "Active",
+			Handler:    _CacheService_Active_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
